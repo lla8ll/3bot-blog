@@ -30,7 +30,13 @@
 
 | المتغير | الغرض |
 |---|---|
-| `DATABASE_URL` | اتصال MySQL، مثال مع TLS: `mysql://user:pass@host:4000/dbname` — أو محليًا: `mysql://user:pass@host:3306/dbname?ssl-mode=disabled` |
+| `DATABASE_URL` | اتصال MySQL كسلسلة واحدة (يُفضَّل إن وُجد). مثال مع TLS: `mysql://user:pass@host:4000/dbname` — أو محليًا: `mysql://user:pass@host:3306/dbname?ssl-mode=disabled` |
+| `DB_HOST` | بديل عن `DATABASE_URL`: مضيف قاعدة البيانات (مثل نقطة TiDB Cloud العامة) |
+| `DB_PORT` | بديل عن `DATABASE_URL`: المنفذ (الافتراضي 4000) |
+| `DB_USER` | بديل عن `DATABASE_URL`: اسم المستخدم |
+| `DB_PASSWORD` | بديل عن `DATABASE_URL`: كلمة المرور |
+| `DB_NAME` | بديل عن `DATABASE_URL`: اسم القاعدة (في TiDB Starter الافتراضي `test`) |
+| `DB_SSL` أو `DB_SSL_MODE` | اختياري مع المتغيرات المنفصلة؛ القيمة `disabled` تعطّل TLS محليًا. الافتراضي: TLS مفعّل مع `rejectUnauthorized=true` و`minVersion=TLSv1.2` |
 | `CLOUDINARY_CLOUD_NAME` | اسم السحابة في حساب Cloudinary |
 | `CLOUDINARY_API_KEY` | مفتاح واجهة Cloudinary |
 | `CLOUDINARY_API_SECRET` | سر واجهة Cloudinary (لا يُكشف للمتصفح) |
@@ -41,7 +47,7 @@
 
 التطبيق يقرأ هذه المتغيرات من بيئة التشغيل فقط ولا يضعها في ملفات الواجهة. مثال للقيم موجود في `.env.example`.
 
-إن نُقص إعداد Cloudinary، يفشل رفع الصور والفيديو برسالة عربية واضحة، بينما يستمر نشر النصوص والاستطلاعات. وإن نُقص `ADMIN_PASSWORD` أو `SESSION_SECRET` تظهر في `/admin` رسالة توضح أن اللوحة غير مفعّلة.
+إن نُقص إعداد Cloudinary، يفشل رفع الصور والفيديو برسالة عربية واضحة، بينما يستمر نشر النصوص والاستطلاعات. وإن نُقص إعداد قاعدة البيانات (`DATABASE_URL` أو مجموعة `DB_*` مكتملة بما فيها `DB_PASSWORD`) لا يتعطل استيراد التطبيق ولا تقديم الصفحة العامة و`/admin`، وتعيد واجهات `/api` رسالة عربية بحالة 503. وإن نُقص `ADMIN_PASSWORD` أو `SESSION_SECRET` تظهر في `/admin` رسالة توضح أن اللوحة غير مفعّلة.
 
 ## إعداد تخزين Cloudinary (مجاني)
 
@@ -52,25 +58,25 @@
 
 ## إعداد قاعدة بيانات MySQL مجانية (موصى به: TiDB Cloud Starter)
 
-الخيار الموصى به للتشغيل مع Vercel هو **TiDB Cloud Starter** (الاسم الحالي لما كان يُعرف بـ TiDB Cloud Serverless): متوافق مع بروتوكول MySQL، وخطته المجانية ما زالت قائمة، ويتطلب TLS على نقطة الاتصال العامة وهو ما يدعمه محلل `DATABASE_URL` في المشروع.
+الخيار الموصى به للتشغيل مع Vercel هو **TiDB Cloud Starter** (الاسم الحالي لما كان يُعرف بـ TiDB Cloud Serverless): متوافق مع بروتوكول MySQL، وخطته المجانية ما زالت قائمة، ويتطلب TLS على نقطة الاتصال العامة. نقطة الاتصال العامة تستخدم شهادات Let's Encrypt الموثوقة في مخزن شهادات النظام؛ لذلك يكفي `ssl: { minVersion: 'TLSv1.2', rejectUnauthorized: true }` مع mysql2 دون ملف CA إضافي (وفق وثائق TiDB: https://docs.pingcap.com/tidbcloud/secure-connections-to-serverless-clusters/ ). يدعم المشروع هذا الإعداد عبر `DATABASE_URL` أو عبر المتغيرات المنفصلة `DB_HOST` و`DB_PORT` و`DB_USER` و`DB_PASSWORD` و`DB_NAME`.
 
 1. أنشئ حسابًا من صفحة التسجيل: https://tidbcloud.com/signup/
 2. أنشئ مثيل **Starter** متوافقًا مع MySQL (لا حاجة لبطاقة ائتمان ضمن الحصة المجانية).
 3. من نافذة الاتصال انسخ سلسلة الاتصال، وعيّن كلمة المرور واحفظها في مكان آمن.
-4. ضع القيمة في `DATABASE_URL` دون `ssl-mode=disabled` حتى يُفعَّل TLS تلقائيًا. المنفذ المعتاد هو 4000.
+4. ضع القيمة في `DATABASE_URL` دون `ssl-mode=disabled` حتى يُفعَّل TLS تلقائيًا، أو املأ `DB_HOST` و`DB_PORT` و`DB_USER` و`DB_PASSWORD` و`DB_NAME` (قاعدة TiDB Starter الافتراضية اسمها `test`). المنفذ المعتاد هو 4000.
 5. حدود الخطة المجانية لكل مثيل (حتى 5 مثيلات لكل منظمة): 5 جيغابايت تخزين صفوف، و5 جيغابايت تخزين عمودي، و50 مليون وحدة طلب شهريًا. التفاصيل من الوثائق الرسمية: https://docs.pingcap.com/tidbcloud/select-cluster-tier/
 
 خيارات أخرى ونقاط المقارنة موثّقة في سجل أبحاث النسخة 2.2 لدى المطوّر؛ لا يُنصح بـ Aiven MySQL المجاني لأنه لم يعد يقبل إنشاء خدمات جديدة منذ 6 نوفمبر 2026.
 
-## النشر على Vercel (لم يُنشر بعد)
+## النشر على Vercel
 
-المشروع مهيأ للتشغيل كدالّة Express عبر `api/index.js` و`vercel.json`، مع تقديم ملفات `public/` من الخادم. حد طلبات دوال Vercel نحو 4.5 ميغابايت؛ لذلك رفع الفيديو حتى 25 ميغابايت يتم مباشرة إلى Cloudinary وليس عبر الدالة. لم يُنفَّذ النشر بعد، والخطوات التالية للتجهيز عندما تقرر ذلك:
+المشروع مهيأ للتشغيل كدالّة Express عبر `api/index.js` و`vercel.json`، مع تقديم ملفات `public/` من الخادم. حد طلبات دوال Vercel نحو 4.5 ميغابايت؛ لذلك رفع الفيديو حتى 25 ميغابايت يتم مباشرة إلى Cloudinary وليس عبر الدالة. يفضَّل ربط المستودع بالمشروع حتى يُنشر كل دفع تلقائيًا. الخطوات:
 
 1. ارفع المشروع إلى مستودع GitHub (مستودع خاص مستحسن).
-2. جهّز `DATABASE_URL` من TiDB Cloud Starter مع TLS، ومفاتيح Cloudinary، وكلمة مرور الإدارة و`SESSION_SECRET`. لا تضع الأسرار في المستودع أو في المحادثة؛ أدخلها بنفسك في لوحة Vercel.
-3. من لوحة Vercel: Add New Project ثم استورد المستودع. اختر إطارًا غير محدد (Other) إن طُلب منك، وNode.js 22 إن توفّر الخيار.
+2. جهّز اتصال TiDB Cloud Starter مع TLS (`DATABASE_URL` أو المتغيرات المنفصلة)، ومفاتيح Cloudinary، وكلمة مرور الإدارة و`SESSION_SECRET`. لا تضع الأسرار في المستودع أو في المحادثة؛ أدخل القيم السرية بنفسك في لوحة Vercel (`DB_PASSWORD` وبيانات Cloudinary و`ADMIN_PASSWORD`).
+3. من لوحة Vercel: Add New Project ثم استورد المستودع. اختر إطارًا غير محدد (Other) إن طُلب منك، وNode.js 22 إن توفّر الخيار، ومنطقة الدوال `iad1` إن أمكن.
 4. في Settings → Environment Variables أضف المتغيرات أعلاه لبيئة Production (ولـ Preview إن رغبت).
-5. اضغط Deploy. بعد نجاح البناء افتح الموقع وتأكد من `/_health` ومن الصفحة الرئيسية ومن `/admin`.
+5. اضغط Deploy. بعد نجاح البناء افتح الموقع وتأكد من الصفحة الرئيسية ومن `/admin`. مسار `/_health` و`/api/posts` يعتمد على اكتمال إعداد قاعدة البيانات.
 6. التشغيل المحلي يبقى: `npm ci` ثم `npm start`.
 
 ## التشغيل
@@ -82,9 +88,15 @@ npm start
 
 ## الإصدار
 
-**v2.2**
+**v2.3**
 
 ## سجل التغييرات
+
+### v2.3 — إعدادات قاعدة بيانات منفصلة وتجهيز النشر
+
+- قبول متغيرات `DB_HOST` و`DB_PORT` و`DB_USER` و`DB_PASSWORD` و`DB_NAME` بديلًا عن `DATABASE_URL` (و`DATABASE_URL` يبقى مفضّلًا إن وُجد). TLS مفعّل افتراضيًا مع `rejectUnauthorized=true` و`minVersion=TLSv1.2` لأن نقطة TiDB Cloud العامة تستخدم شهادات Let's Encrypt الموثوقة في مخزن النظام.
+- عدم تعطّل الاستيراد أو تقديم الصفحة العامة و`/admin` عند نقص إعداد قاعدة البيانات؛ واجهات `/api` تعيد رسالة عربية بحالة 503. الخادم المحلي يستمع حتى إن لم تكتمل إعدادات القاعدة.
+- تحديث `.env.example` و`README.md` وتوثيق النشر.
 
 ### v2.2 — وضع فاتح، رفع موقّع، وتهيئة Vercel
 

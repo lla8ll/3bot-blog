@@ -23,21 +23,20 @@ const MEDIA_FOLDER = '3bot-blog/posts';
 const SESSION_COOKIE = '3bot_admin';
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
-function createPool() {
-  if (!process.env.DATABASE_URL) throw new Error('database_configuration_missing');
-  const dsn = new URL(process.env.DATABASE_URL);
-  if (!['mysql:', 'mysqls:'].includes(dsn.protocol)) throw new Error('database_url_invalid');
-  const sslMode = (dsn.searchParams.get('ssl-mode') || dsn.searchParams.get('ssl') || '').toLowerCase();
-  const tlsDisabled = ['disabled', 'disable', 'false', '0'].includes(sslMode);
+function isTlsDisabled(sslMode) {
+  return ['disabled', 'disable', 'false', '0'].includes(String(sslMode || '').toLowerCase());
+}
+
+function poolOptions({ host, port, user, password, database, tlsDisabled }) {
   const defaultLimit = process.env.VERCEL ? 1 : 5;
   const connectionLimit = Math.max(1, Number(process.env.DB_CONNECTION_LIMIT || defaultLimit) || defaultLimit);
-  return mysql.createPool({
-    host: dsn.hostname,
-    port: Number(dsn.port || 3306),
-    user: decodeURIComponent(dsn.username),
-    password: decodeURIComponent(dsn.password),
-    database: decodeURIComponent(dsn.pathname.replace(/^\//, '')),
-    ssl: tlsDisabled ? undefined : { rejectUnauthorized: true },
+  return {
+    host,
+    port,
+    user,
+    password,
+    database,
+    ssl: tlsDisabled ? undefined : { minVersion: 'TLSv1.2', rejectUnauthorized: true },
     waitForConnections: true,
     connectionLimit,
     queueLimit: 0,
@@ -49,7 +48,36 @@ function createPool() {
     supportBigNumbers: true,
     bigNumberStrings: true,
     timezone: 'Z'
-  });
+  };
+}
+
+function createPool() {
+  if (process.env.DATABASE_URL) {
+    const dsn = new URL(process.env.DATABASE_URL);
+    if (!['mysql:', 'mysqls:'].includes(dsn.protocol)) throw new Error('database_url_invalid');
+    const sslMode = dsn.searchParams.get('ssl-mode') || dsn.searchParams.get('ssl') || '';
+    return mysql.createPool(poolOptions({
+      host: dsn.hostname,
+      port: Number(dsn.port || 3306),
+      user: decodeURIComponent(dsn.username),
+      password: decodeURIComponent(dsn.password),
+      database: decodeURIComponent(dsn.pathname.replace(/^\//, '')),
+      tlsDisabled: isTlsDisabled(sslMode)
+    }));
+  }
+  const host = (process.env.DB_HOST || '').trim();
+  const user = (process.env.DB_USER || '').trim();
+  const password = process.env.DB_PASSWORD;
+  const database = (process.env.DB_NAME || '').trim();
+  if (!host || !user || !password || !database) return null;
+  return mysql.createPool(poolOptions({
+    host,
+    port: Number(process.env.DB_PORT || 4000),
+    user,
+    password,
+    database,
+    tlsDisabled: isTlsDisabled(process.env.DB_SSL || process.env.DB_SSL_MODE)
+  }));
 }
 
 const pool = createPool();
@@ -100,6 +128,7 @@ async function ensureMediaPublicIdColumn() {
 
 let schemaPromise = null;
 export async function ensureSchema() {
+  if (!pool) throw new Error('database_configuration_missing');
   if (!schemaPromise) schemaPromise = initializeSchema();
   try {
     await schemaPromise;
@@ -307,6 +336,7 @@ function parseMultipartPost(req, res, next) {
 
 app.get('/_health', async (_req, res) => {
   try {
+    if (!pool) throw new Error('database_configuration_missing');
     await pool.query('SELECT 1');
     res.status(200).json({ ok: true });
   } catch {
@@ -620,14 +650,18 @@ function isDirectRun() {
 }
 
 async function start() {
-  await ensureSchema();
   app.listen(port, '0.0.0.0', () => console.log(`Application listening on port ${port}`));
+  try {
+    await ensureSchema();
+  } catch (error) {
+    console.error(`Database is not ready: ${error.message === 'database_configuration_missing' ? 'database configuration missing' : 'database initialization error'}`);
+  }
 }
 
 if (isDirectRun()) {
   start().catch(async (error) => {
     console.error(`Application startup failed: ${error.message === 'database_configuration_missing' ? 'database configuration missing' : 'database initialization error'}`);
-    await pool.end().catch(() => {});
+    if (pool) await pool.end().catch(() => {});
     process.exit(1);
   });
 }
