@@ -165,9 +165,37 @@
 }
 .admin-poll-summary b { color: var(--text); font-weight: 600; }
 
+.admin-post--hidden {
+  box-shadow: none;
+  background: color-mix(in srgb, var(--card-bg) 70%, transparent);
+}
+.admin-post--hidden .admin-media,
+.admin-post--hidden .admin-post-content,
+.admin-post--hidden .admin-poll-summary,
+.admin-post--hidden .admin-post-meta .post-kind,
+.admin-post--hidden .admin-post-meta time {
+  opacity: 0.62;
+}
+.admin-hidden-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
 .admin-post-actions {
   display: flex;
   align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.admin-post-actions .button-outline {
+  padding: 0.5rem 0.95rem;
+  font-size: 0.85rem;
 }
 
 .button-danger {

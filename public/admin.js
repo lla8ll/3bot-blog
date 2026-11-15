@@ -169,15 +169,82 @@ function mediaPreview(post) {
   return box;
 }
 
+function isHiddenPost(postOrCard) {
+  if (postOrCard instanceof HTMLElement) return postOrCard.dataset.hidden === '1';
+  return Boolean(postOrCard?.isHidden);
+}
+
+function applyVisibility(card, hidden) {
+  card.classList.toggle('admin-post--hidden', hidden);
+  card.dataset.hidden = hidden ? '1' : '0';
+  const meta = card.querySelector('.admin-post-meta');
+  let badge = card.querySelector('.admin-hidden-badge');
+  if (hidden && !badge && meta) {
+    badge = make('span', 'admin-hidden-badge', 'مخفي');
+    const time = meta.querySelector('time');
+    if (time) meta.insertBefore(badge, time);
+    else meta.append(badge);
+  } else if (!hidden && badge) {
+    badge.remove();
+  }
+  const toggle = card.querySelector('[data-action="visibility"]');
+  if (toggle) {
+    toggle.textContent = hidden ? 'إظهار' : 'إخفاء';
+    toggle.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+    toggle.setAttribute('aria-label', hidden ? 'إظهار المنشور' : 'إخفاء المنشور');
+  }
+}
+
+async function onToggleVisibility(post, button) {
+  const card = button.closest('.admin-post');
+  if (!card) return;
+  const nextHidden = !isHiddenPost(card);
+  button.disabled = true;
+  try {
+    const data = await api(`/api/admin/posts/${encodeURIComponent(post.id)}/visibility`, {
+      method: 'PATCH',
+      body: JSON.stringify({ hidden: nextHidden })
+    });
+    applyVisibility(card, Boolean(data.isHidden));
+    updatePostCount();
+    showToast(data.isHidden ? 'تم إخفاء المنشور.' : 'تم إظهار المنشور.', 'success');
+  } catch (error) {
+    showToast(error.message, 'error');
+    if (error.status === 401) {
+      renderLogin('انتهت الجلسة. سجّل الدخول مجددًا.');
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function updatePostCount() {
+  const count = document.querySelector('#postCount');
+  const cards = [...document.querySelectorAll('#adminList .admin-post')];
+  if (!count) return;
+  if (!cards.length) {
+    count.textContent = 'لا توجد مشاركات';
+    return;
+  }
+  const hiddenCount = cards.filter((card) => isHiddenPost(card)).length;
+  count.textContent = hiddenCount
+    ? `${cards.length} مشاركة · ${hiddenCount} مخفي`
+    : `${cards.length} مشاركة`;
+}
+
 function renderPost(post) {
-  const card = make('article', 'admin-post');
+  const hidden = isHiddenPost(post);
+  const card = make('article', hidden ? 'admin-post admin-post--hidden' : 'admin-post');
   card.dataset.type = post.type || '';
   card.dataset.id = post.id;
+  card.dataset.hidden = hidden ? '1' : '0';
   card.append(mediaPreview(post));
   const body = make('div', 'admin-post-body');
   const meta = make('div', 'admin-post-meta');
   const kind = make('span', 'post-kind', TYPE_LABELS[post.type] || 'مشاركة');
-  meta.append(kind, make('time', '', formatDate(post.createdAt)));
+  meta.append(kind);
+  if (hidden) meta.append(make('span', 'admin-hidden-badge', 'مخفي'));
+  meta.append(make('time', '', formatDate(post.createdAt)));
   body.append(meta);
   body.append(make('p', 'admin-post-content', previewText(post.content)));
   if (post.type === 'poll') {
@@ -198,10 +265,16 @@ function renderPost(post) {
     body.append(list);
   }
   const actions = make('div', 'admin-post-actions');
+  const toggle = make('button', 'button button-outline', hidden ? 'إظهار' : 'إخفاء');
+  toggle.type = 'button';
+  toggle.dataset.action = 'visibility';
+  toggle.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+  toggle.setAttribute('aria-label', hidden ? 'إظهار المنشور' : 'إخفاء المنشور');
+  toggle.addEventListener('click', () => onToggleVisibility(post, toggle));
   const del = make('button', 'button button-danger', 'حذف');
   del.type = 'button';
   del.addEventListener('click', () => openConfirm(post));
-  actions.append(del);
+  actions.append(toggle, del);
   card.append(body, actions);
   return card;
 }
@@ -230,12 +303,13 @@ async function showDashboard() {
     const data = await api('/api/admin/posts');
     list.replaceChildren();
     const posts = data.posts || [];
-    count.textContent = posts.length ? `${posts.length} مشاركة` : 'لا توجد مشاركات';
     if (!posts.length) {
+      count.textContent = 'لا توجد مشاركات';
       list.append(make('p', 'empty-state', 'لا توجد مشاركات حاليًا.'));
       return;
     }
     for (const post of posts) list.append(renderPost(post));
+    updatePostCount();
   } catch (error) {
     if (error.status === 401) {
       renderLogin('انتهت الجلسة. سجّل الدخول مجددًا.');
@@ -281,7 +355,7 @@ confirmDelete.addEventListener('click', async () => {
     const remaining = main.querySelectorAll('.admin-post').length;
     const count = document.querySelector('#postCount');
     const list = document.querySelector('#adminList');
-    if (count) count.textContent = remaining ? `${remaining} مشاركة` : 'لا توجد مشاركات';
+    if (count) updatePostCount();
     if (list && remaining === 0) list.append(make('p', 'empty-state', 'لا توجد مشاركات حاليًا.'));
   } catch (error) {
     showToast(error.message, 'error');

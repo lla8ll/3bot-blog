@@ -149,6 +149,7 @@ async function initializeSchema() {
     post_type ENUM('text','image','video','poll') NOT NULL,
     content VARCHAR(720) NOT NULL DEFAULT '',
     media_url VARCHAR(512) NULL,
+    is_hidden TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_posts_created_at (created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
@@ -172,6 +173,7 @@ async function initializeSchema() {
     CONSTRAINT fk_poll_votes_option FOREIGN KEY (option_id) REFERENCES poll_options(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   await ensureMediaPublicIdColumn();
+  await ensureIsHiddenColumn();
 }
 
 async function ensureMediaPublicIdColumn() {
@@ -184,6 +186,19 @@ async function ensureMediaPublicIdColumn() {
   );
   if (Number(rows[0]?.count || 0) === 0) {
     await pool.query('ALTER TABLE posts ADD COLUMN media_public_id VARCHAR(255) NULL');
+  }
+}
+
+async function ensureIsHiddenColumn() {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS count
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'posts'
+       AND COLUMN_NAME = 'is_hidden'`
+  );
+  if (Number(rows[0]?.count || 0) === 0) {
+    await pool.query('ALTER TABLE posts ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0');
   }
 }
 
@@ -419,14 +434,16 @@ function mapPost(post, optionsByPost) {
     content: post.content,
     mediaUrl: post.mediaUrl || null,
     createdAt: post.createdAt instanceof Date ? post.createdAt.toISOString() : post.createdAt,
+    isHidden: Boolean(Number(post.isHidden)),
     options: optionsByPost.get(String(post.id)) || []
   };
 }
 
-async function loadPostsWithOptions(limit) {
+async function loadPostsWithOptions(limit, { includeHidden = false } = {}) {
+  const visibilitySql = includeHidden ? '' : 'WHERE is_hidden = 0';
   const [posts] = await pool.query(
-    `SELECT id, post_type AS type, content, media_url AS mediaUrl, created_at AS createdAt
-     FROM posts ORDER BY created_at DESC, id DESC LIMIT ?`,
+    `SELECT id, post_type AS type, content, media_url AS mediaUrl, created_at AS createdAt, is_hidden AS isHidden
+     FROM posts ${visibilitySql} ORDER BY created_at DESC, id DESC LIMIT ?`,
     [limit]
   );
   if (!posts.length) return [];
@@ -622,7 +639,7 @@ app.post('/api/posts/:id/vote', async (req, res) => {
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const [poll] = await connection.execute("SELECT id FROM posts WHERE id = ? AND post_type = 'poll' FOR UPDATE", [postId]);
+    const [poll] = await connection.execute("SELECT id FROM posts WHERE id = ? AND post_type = 'poll' AND is_hidden = 0 FOR UPDATE", [postId]);
     if (!poll.length) { await connection.rollback(); return res.status(404).json({ error: 'الاستطلاع غير موجود.' }); }
     const [option] = await connection.execute('SELECT id FROM poll_options WHERE id = ? AND post_id = ? FOR UPDATE', [optionId, postId]);
     if (!option.length) { await connection.rollback(); return res.status(400).json({ error: 'الخيار لا يتبع هذا الاستطلاع.' }); }
@@ -667,10 +684,27 @@ app.post('/api/admin/logout', (req, res) => {
 
 app.get('/api/admin/posts', requireAdmin, async (_req, res) => {
   try {
-    const posts = await loadPostsWithOptions(200);
+    const posts = await loadPostsWithOptions(200, { includeHidden: true });
     res.json({ posts });
   } catch {
     res.status(500).json({ error: 'تعذر تحميل المشاركات الآن.' });
+  }
+});
+
+app.patch('/api/admin/posts/:id/visibility', requireAdmin, async (req, res) => {
+  const postId = String(req.params.id);
+  if (!/^\d{1,20}$/.test(postId)) return res.status(400).json({ error: 'معرّف المنشور غير صالح.' });
+  if (typeof req.body?.hidden !== 'boolean') {
+    return res.status(400).json({ error: 'قيمة الإخفاء غير صالحة.' });
+  }
+  const isHidden = req.body.hidden;
+  try {
+    const [rows] = await pool.execute('SELECT id FROM posts WHERE id = ?', [postId]);
+    if (!rows.length) return res.status(404).json({ error: 'المنشور غير موجود.' });
+    await pool.execute('UPDATE posts SET is_hidden = ? WHERE id = ?', [isHidden ? 1 : 0, postId]);
+    res.json({ ok: true, id: postId, isHidden });
+  } catch {
+    res.status(500).json({ error: 'تعذر تحديث ظهور المنشور الآن.' });
   }
 });
 
