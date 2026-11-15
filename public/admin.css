@@ -83,6 +83,13 @@
   color: var(--muted);
   font-size: 0.82rem;
 }
+.admin-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 
 .admin-list { display: grid; gap: 12px; }
 
