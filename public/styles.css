@@ -585,7 +585,7 @@ select:focus, textarea:focus, input[type="file"]:focus, .option-input:focus {
 }
 select { max-width: 260px; }
 textarea {
-  min-height: 120px;
+  min-height: 160px;
   resize: vertical;
   line-height: 1.85;
 }
@@ -601,8 +601,7 @@ textarea::placeholder,
   margin-bottom: 18px;
 }
 #charCount {
-  direction: ltr;
-  unicode-bidi: isolate;
+  margin-inline-start: auto;
 }
 .field-hint {
   font-size: 0.75rem;
@@ -713,8 +712,38 @@ textarea::placeholder,
   line-height: 1.9;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  word-break: break-word;
   margin: 0 0 12px;
   color: var(--text);
+}
+.post-content.is-collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+  overflow: hidden;
+}
+.post-content-wrap {
+  margin: 0 0 12px;
+}
+.post-content-wrap .post-content {
+  margin-bottom: 6px;
+}
+.read-more {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.read-more:hover,
+.read-more:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .post-image,

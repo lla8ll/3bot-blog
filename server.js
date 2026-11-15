@@ -22,6 +22,8 @@ const VIDEO_FORMATS = 'mp4,webm';
 const MEDIA_FOLDER = '3bot-blog/posts';
 const SESSION_COOKIE = '3bot_admin';
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const MAX_CONTENT_LENGTH = 100000;
+const JSON_BODY_LIMIT = '2mb';
 
 const ENV_KEYS_TO_CLEAN = [
   'CLOUDINARY_CLOUD_NAME',
@@ -147,7 +149,7 @@ async function initializeSchema() {
   await pool.query(`CREATE TABLE IF NOT EXISTS posts (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     post_type ENUM('text','image','video','poll') NOT NULL,
-    content VARCHAR(720) NOT NULL DEFAULT '',
+    content MEDIUMTEXT NOT NULL,
     media_url VARCHAR(512) NULL,
     is_hidden TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -174,6 +176,7 @@ async function initializeSchema() {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   await ensureMediaPublicIdColumn();
   await ensureIsHiddenColumn();
+  await ensureContentColumnType();
 }
 
 async function ensureMediaPublicIdColumn() {
@@ -200,6 +203,21 @@ async function ensureIsHiddenColumn() {
   if (Number(rows[0]?.count || 0) === 0) {
     await pool.query('ALTER TABLE posts ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0');
   }
+}
+
+async function ensureContentColumnType() {
+  const [rows] = await pool.query(
+    `SELECT DATA_TYPE AS dataType
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'posts'
+       AND COLUMN_NAME = 'content'`
+  );
+  const dataType = String(rows[0]?.dataType || rows[0]?.DATA_TYPE || '').toLowerCase();
+  if (dataType === 'mediumtext' || dataType === 'longtext') return;
+  await pool.query(
+    'ALTER TABLE posts MODIFY COLUMN content MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL'
+  );
 }
 
 let schemaPromise = null;
@@ -375,7 +393,7 @@ app.use((req, res, next) => {
     res.status(503).json({ error: 'تعذر الاتصال بقاعدة البيانات.' });
   });
 });
-app.use(express.json({ limit: '64kb' }));
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -565,7 +583,7 @@ app.post('/api/posts', createPostLimiter, requireAdmin, parseMultipartPost, asyn
   const type = String(req.body?.type || '');
   const content = String(req.body?.content || '').trim();
   if (!postTypes.has(type)) return res.status(400).json({ error: 'نوع المشاركة غير صالح.' });
-  if (content.length > 720) return res.status(400).json({ error: 'يجب ألا يتجاوز النص 720 حرفًا.' });
+  if (content.length > MAX_CONTENT_LENGTH) return res.status(400).json({ error: 'النص أطول من الحد المسموح. اختصر المنشور ثم حاول مجددًا.' });
   if ((type === 'text' || type === 'poll') && !content) return res.status(400).json({ error: 'اكتب نص المشاركة أولًا.' });
 
   let options = [];
@@ -749,6 +767,9 @@ app.use((error, _req, res, _next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'حجم الملف يتجاوز الحد الأقصى وهو 25 ميغابايت.' });
     return res.status(400).json({ error: 'تعذر قراءة ملف الوسائط.' });
+  }
+  if (error?.type === 'entity.too.large' || error?.status === 413) {
+    return res.status(413).json({ error: 'حجم المنشور أكبر من المسموح.' });
   }
   res.status(500).json({ error: 'حدث خطأ غير متوقع.' });
 });

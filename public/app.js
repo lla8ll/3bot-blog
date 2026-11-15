@@ -9,6 +9,9 @@ const formMessage = document.querySelector('#formMessage');
 const feed = document.querySelector('#feed');
 const submitButton = document.querySelector('#submitPost');
 const MAX_OPTIONS = 6;
+const MAX_CONTENT_LENGTH = 100000;
+const FEED_PREVIEW_CHARS = 480;
+const FEED_PREVIEW_LINES = 8;
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -89,9 +92,13 @@ function syncComposer() {
 
 typeField.addEventListener('change', syncComposer);
 document.querySelector('#addOption').addEventListener('click', () => addOption());
-contentField.addEventListener('input', () => {
-  document.querySelector('#charCount').textContent = `${contentField.value.length} / 720`;
-});
+function updateCharCount() {
+  const count = contentField.value.length;
+  const label = document.querySelector('#charCount');
+  if (label) label.textContent = `${count} حرف`;
+}
+
+contentField.addEventListener('input', updateCharCount);
 document.querySelector('#refreshButton').addEventListener('click', loadPosts);
 
 function make(tag, className, text) {
@@ -131,6 +138,26 @@ function showToast(message, type = 'success') {
   timer = window.setTimeout(dismiss, 5500);
 }
 
+function renderPostContent(content) {
+  const text = String(content || '');
+  const paragraph = make('p', 'post-content', text);
+  const lineCount = text.split('\n').length;
+  if (text.length <= FEED_PREVIEW_CHARS && lineCount <= FEED_PREVIEW_LINES) return paragraph;
+
+  paragraph.classList.add('is-collapsed');
+  const wrap = make('div', 'post-content-wrap');
+  const toggle = make('button', 'read-more', 'اقرأ المزيد');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.addEventListener('click', () => {
+    const collapsed = paragraph.classList.toggle('is-collapsed');
+    toggle.textContent = collapsed ? 'اقرأ المزيد' : 'عرض أقل';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+  });
+  wrap.append(paragraph, toggle);
+  return wrap;
+}
+
 function renderPost(post) {
   const card = make('article', 'post-card');
   card.dataset.type = post.type || '';
@@ -140,7 +167,7 @@ function renderPost(post) {
   const date = new Date(post.createdAt);
   meta.append(make('time', '', Number.isNaN(date.valueOf()) ? '' : new Intl.DateTimeFormat('ar', {dateStyle:'medium', timeStyle:'short'}).format(date)));
   card.append(meta);
-  if (post.content) card.append(make('p', 'post-content', post.content));
+  if (post.content) card.append(renderPostContent(post.content));
   if (post.type === 'image' && post.mediaUrl) {
     const image = document.createElement('img'); image.className = 'post-image'; image.src = post.mediaUrl; image.alt = post.content || 'صورة منشورة'; image.loading = 'lazy'; card.append(image);
   }
@@ -209,6 +236,7 @@ form.addEventListener('submit', async (event) => {
   const type = typeField.value;
   const content = contentField.value.trim();
   if ((type === 'text' || type === 'poll') && !content) return showMessage(type === 'poll' ? 'اكتب سؤال الاستطلاع أولًا.' : 'اكتب نص المنشور أولًا.', true);
+  if (content.length > MAX_CONTENT_LENGTH) return showMessage('النص أطول من الحد المسموح. اختصر المنشور ثم حاول مجددًا.', true);
   const options = [...optionsHost.querySelectorAll('input')].map((input) => input.value.trim()).filter(Boolean);
   if (type === 'poll' && (options.length < 2 || options.length > MAX_OPTIONS)) return showMessage('أضف خيارين على الأقل للاستطلاع.', true);
   const file = mediaInput.files[0];
@@ -232,7 +260,7 @@ form.addEventListener('submit', async (event) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'تعذر نشر المشاركة.');
     form.reset(); optionsHost.replaceChildren(); syncComposer();
-    document.querySelector('#charCount').textContent = '0 / 720';
+    updateCharCount();
     showMessage('تم نشر مشاركتك بنجاح.');
     await loadPosts();
     document.querySelector('#feed').scrollIntoView({behavior:'smooth', block:'start'});
