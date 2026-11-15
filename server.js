@@ -346,8 +346,15 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
+const skipDatabasePaths = new Set([
+  '/api/admin/session',
+  '/api/admin/status',
+  '/api/admin/login',
+  '/api/admin/logout'
+]);
+
 app.use((req, res, next) => {
-  if (req.path !== '/_health' && !req.path.startsWith('/api/')) return next();
+  if (skipDatabasePaths.has(req.path) || (req.path !== '/_health' && !req.path.startsWith('/api/'))) return next();
   ensureSchema().then(() => next()).catch(() => {
     if (req.path === '/_health') return res.status(503).json({ ok: false });
     res.status(503).json({ error: 'تعذر الاتصال بقاعدة البيانات.' });
@@ -493,7 +500,7 @@ async function destroyCloudinaryAsset(publicId, postType) {
   }
 }
 
-app.post('/api/uploads/sign', uploadSignLimiter, (req, res) => {
+app.post('/api/uploads/sign', uploadSignLimiter, requireAdmin, (req, res) => {
   if (!isCloudinaryConfigured()) {
     return res.status(503).json({ error: 'رفع الوسائط غير متاح حاليًا لأن خدمة التخزين غير مُعدّة.' });
   }
@@ -537,7 +544,7 @@ app.post('/api/uploads/sign', uploadSignLimiter, (req, res) => {
   });
 });
 
-app.post('/api/posts', createPostLimiter, parseMultipartPost, async (req, res) => {
+app.post('/api/posts', createPostLimiter, requireAdmin, parseMultipartPost, async (req, res) => {
   const type = String(req.body?.type || '');
   const content = String(req.body?.content || '').trim();
   if (!postTypes.has(type)) return res.status(400).json({ error: 'نوع المشاركة غير صالح.' });
@@ -630,6 +637,10 @@ app.post('/api/posts/:id/vote', async (req, res) => {
   } finally {
     connection?.release();
   }
+});
+
+app.get('/api/admin/session', (req, res) => {
+  res.json({ admin: Boolean(readAdminSession(req)) });
 });
 
 app.get('/api/admin/status', (req, res) => {
