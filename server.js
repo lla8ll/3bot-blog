@@ -23,6 +23,67 @@ const MEDIA_FOLDER = '3bot-blog/posts';
 const SESSION_COOKIE = '3bot_admin';
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
+const ENV_KEYS_TO_CLEAN = [
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+  'DB_HOST',
+  'DB_PORT',
+  'DB_USER',
+  'DB_PASSWORD',
+  'DB_NAME',
+  'DATABASE_URL',
+  'DB_SSL',
+  'DB_SSL_MODE',
+  'ADMIN_PASSWORD',
+  'SESSION_SECRET'
+];
+
+export function cleanEnvValue(value) {
+  if (value == null) return value;
+  let s = String(value).trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2)
+    || (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
+export function normalizeProcessEnv(env = process.env) {
+  for (const key of ENV_KEYS_TO_CLEAN) {
+    if (env[key] != null && env[key] !== '') {
+      env[key] = cleanEnvValue(env[key]);
+    }
+  }
+  return env;
+}
+
+export function cloudinarySecretIssues(secret = process.env.CLOUDINARY_API_SECRET, apiKey = process.env.CLOUDINARY_API_KEY) {
+  const issues = [];
+  if (!secret) return issues;
+  if (secret.includes('*')) issues.push('contains_asterisk');
+  if (/\s/.test(secret)) issues.push('contains_whitespace');
+  if (apiKey && secret === apiKey) issues.push('equals_api_key');
+  if (secret.length < 20 || secret.length > 40) issues.push('unexpected_length');
+  return issues;
+}
+
+function logCloudinaryConfigCheck() {
+  const secret = process.env.CLOUDINARY_API_SECRET || '';
+  const issues = cloudinarySecretIssues(secret, process.env.CLOUDINARY_API_KEY);
+  if (!issues.length) return;
+  console.error(
+    'Cloudinary configuration warning: API_SECRET looks malformed (%s). Length=%s. Paste the real secret from the Cloudinary console, not the masked value.',
+    issues.join(','),
+    secret.length
+  );
+}
+
+normalizeProcessEnv();
+logCloudinaryConfigCheck();
+
 function isTlsDisabled(sslMode) {
   return ['disabled', 'disable', 'false', '0'].includes(String(sslMode || '').toLowerCase());
 }
@@ -436,6 +497,9 @@ app.post('/api/uploads/sign', uploadSignLimiter, (req, res) => {
   if (!isCloudinaryConfigured()) {
     return res.status(503).json({ error: 'رفع الوسائط غير متاح حاليًا لأن خدمة التخزين غير مُعدّة.' });
   }
+  if ((process.env.CLOUDINARY_API_SECRET || '').includes('*')) {
+    return res.status(500).json({ error: 'إعداد التخزين غير صالح. يبدو أن سر Cloudinary نُسخ بشكل غير صحيح. الصق القيمة الحقيقية من لوحة Cloudinary، وليس القيمة المقنّعة التي تحتوي على علامة *.' });
+  }
   const resourceType = String(req.body?.resourceType || '');
   if (resourceType !== 'image' && resourceType !== 'video') {
     return res.status(400).json({ error: 'نوع الملف غير صالح.' });
@@ -450,7 +514,14 @@ app.post('/api/uploads/sign', uploadSignLimiter, (req, res) => {
     allowed_formats: allowedFormats
   };
   configureCloudinary();
-  const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
+  // Browser unsigned/signed uploads are verified by Cloudinary with SHA-1 and signature version 1
+  // (unencoded param string). Be explicit so a future SDK default cannot change the signed string.
+  const signature = cloudinary.utils.api_sign_request(
+    paramsToSign,
+    process.env.CLOUDINARY_API_SECRET,
+    'sha1',
+    1
+  );
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   res.json({
     cloudName,
