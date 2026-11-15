@@ -71,8 +71,14 @@ function previewText(content) {
   return text.length > 160 ? `${text.slice(0, 157)}…` : text;
 }
 
+function setWritePostVisible(visible) {
+  const writePostButton = document.querySelector('#writePostButton');
+  if (writePostButton) writePostButton.hidden = !visible;
+}
+
 function renderDisabled() {
   logoutButton.hidden = true;
+  setWritePostVisible(false);
   const card = make('section', 'disabled-card');
   card.append(make('p', 'eyebrow', 'غير مفعّلة'));
   card.append(make('h1', '', 'لوحة الإدارة غير مفعّلة'));
@@ -82,6 +88,7 @@ function renderDisabled() {
 
 function renderLogin(message) {
   logoutButton.hidden = true;
+  setWritePostVisible(false);
   const card = make('form', 'login-card composer-card');
   card.id = 'loginForm';
   const chrome = make('div', 'composer-chrome');
@@ -201,14 +208,19 @@ function renderPost(post) {
 
 async function showDashboard() {
   logoutButton.hidden = false;
+  setWritePostVisible(true);
   const intro = make('div', 'admin-intro');
   const headingWrap = make('div', 'section-heading admin-toolbar');
   const titles = document.createElement('div');
   titles.append(make('p', 'eyebrow', 'إدارة المحتوى'));
   titles.append(make('h1', '', 'المشاركات'));
+  const actions = make('div', 'admin-toolbar-actions');
+  const writeLink = make('a', 'button button-primary', 'اكتب منشورًا');
+  writeLink.href = '/#composer';
   const count = make('p', 'admin-count', 'جارٍ التحميل...');
   count.id = 'postCount';
-  headingWrap.append(titles, count);
+  actions.append(writeLink, count);
+  headingWrap.append(titles, actions);
   intro.append(headingWrap);
   const list = make('div', 'admin-list');
   list.id = 'adminList';

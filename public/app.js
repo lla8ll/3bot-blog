@@ -24,6 +24,7 @@ async function uploadMediaToCloudinary(file, type) {
   }
   const signResponse = await fetch('/api/uploads/sign', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ resourceType: type })
   });
@@ -190,7 +191,7 @@ async function loadPosts() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'تعذر تحميل المشاركات.');
     feed.replaceChildren();
-    if (!data.posts.length) { feed.append(make('p', 'empty-state', 'لا توجد مشاركات بعد. كن أول من يشارك فكرة أو استطلاعًا.')); return; }
+    if (!data.posts.length) { feed.append(make('p', 'empty-state', 'لا توجد مشاركات حتى الآن.')); return; }
     for (const post of data.posts) feed.append(renderPost(post));
   } catch (error) {
     feed.replaceChildren(make('p', 'empty-state', error.message || 'تعذر الاتصال بالموقع. حاول التحديث.'));
@@ -221,11 +222,12 @@ form.addEventListener('submit', async (event) => {
       const uploaded = await uploadMediaToCloudinary(file, type);
       response = await fetch('/api/posts', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, content, mediaUrl: uploaded.mediaUrl, mediaPublicId: uploaded.mediaPublicId })
       });
     } else {
-      response = await fetch('/api/posts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type, content, options})});
+      response = await fetch('/api/posts', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type, content, options})});
     }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'تعذر نشر المشاركة.');
@@ -241,5 +243,30 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-syncComposer();
-loadPosts();
+async function refreshPublisherMode() {
+  let isAdmin = false;
+  try {
+    const response = await fetch('/api/admin/session', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin'
+    });
+    const data = await response.json().catch(() => ({}));
+    isAdmin = Boolean(data.admin);
+  } catch {
+    isAdmin = false;
+  }
+  document.body.classList.toggle('is-publisher', isAdmin);
+  document.querySelector('#contentArea')?.classList.toggle('has-composer', isAdmin);
+  for (const el of document.querySelectorAll('[data-publisher-only]')) {
+    el.hidden = !isAdmin;
+  }
+  return isAdmin;
+}
+
+refreshPublisherMode().then((isAdmin) => {
+  if (isAdmin) syncComposer();
+  loadPosts();
+  if (isAdmin && location.hash === '#composer') {
+    document.getElementById('composer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});

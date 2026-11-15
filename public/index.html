@@ -52,7 +52,7 @@
           <path d="M21 14.3A8.5 8.5 0 1 1 9.7 3 7 7 0 0 0 21 14.3z"/>
         </svg>
       </button>
-      <a class="button button-small button-outline" href="#composer">أضف منشورًا <span aria-hidden="true">＋</span></a>
+      <a class="button button-small button-outline" id="addPostButton" href="#composer" data-publisher-only hidden>أضف منشورًا <span aria-hidden="true">＋</span></a>
     </div>
   </header>
 
@@ -61,7 +61,7 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="eyebrow-dot"></span> مساحة أفكارك ومشاركاتك</p>
         <h1 id="heroTitle">مرحباً بك في <span class="hero-name">مدونة 3bot</span></h1>
-        <p class="intro">مدونة تقنية حيّة لمشاركة أفكارك وصورك وفيديوهاتك واستطلاعات الرأي مع العالم — بهوية مستقلة ومفتوحة للزوّار.</p>
+        <p class="intro">مدونة تقنية حيّة لمشاركة الأفكار والصور والفيديوهات واستطلاعات الرأي — بهوية مستقلة، والقراءة متاحة للزوّار.</p>
 
         <div class="features" aria-label="مزايا المنصة">
           <article class="feature-card">
@@ -96,7 +96,7 @@
           </article>
         </div>
 
-        <a class="button button-primary" href="#composer">ابدأ المشاركة <span aria-hidden="true">↓</span></a>
+        <a class="button button-primary" id="heroComposeButton" href="#composer" data-publisher-only hidden>ابدأ المشاركة <span aria-hidden="true">↓</span></a>
       </div>
 
       <div class="hero-visual" aria-hidden="true">
@@ -112,8 +112,8 @@
       </div>
     </section>
 
-    <section class="content-area" aria-label="مشاركة المنشورات ومتابعتها">
-      <div class="composer-col">
+    <section class="content-area" id="contentArea" aria-label="مشاركة المنشورات ومتابعتها">
+      <div class="composer-col" id="composerCol" data-publisher-only hidden>
         <div class="section-heading" id="composer">
           <div>
             <p class="eyebrow">شارك شيئًا جديدًا</p>
@@ -153,7 +153,7 @@
           </fieldset>
 
           <div class="composer-footer">
-            <p class="privacy-note">النشر متاح للزوار. لا تشارك معلومات شخصية أو حساسة.</p>
+            <p class="privacy-note">النشر متاح لصاحب المدونة بعد تسجيل الدخول. لا تشارك معلومات شخصية أو حساسة.</p>
             <button class="button button-primary" id="submitPost" type="submit">نشر المشاركة</button>
           </div>
           <p class="form-message" id="formMessage" role="status" aria-live="polite"></p>

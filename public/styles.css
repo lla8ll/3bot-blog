@@ -291,6 +291,7 @@ img, video, svg { max-width: 100%; }
   box-shadow: var(--button-primary-hover-shadow);
 }
 .button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+[hidden] { display: none !important; }
 
 /* —— Hero —— */
 .hero {
@@ -906,6 +907,9 @@ footer p { margin: 0; }
     grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.2fr);
     align-items: start;
     gap: 32px;
+  }
+  .content-area:not(.has-composer) {
+    grid-template-columns: minmax(0, 1fr);
   }
   .composer-col {
     position: sticky;
